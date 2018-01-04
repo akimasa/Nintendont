@@ -17,7 +17,7 @@ else
 	BIN2H =	../bin2h/bin2h
 endif
 
-SFILES		:=	$(wildcard *.S)
+SFILES		:=	$(wildcard *.S net/*.S)
 DFILES		:=	$(SFILES:.S=.d)
 ELFFILES	:=	$(SFILES:.S=.elf)
 BINFILES	:=	$(ELFFILES:.elf=.bin)

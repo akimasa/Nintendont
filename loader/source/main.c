@@ -552,7 +552,9 @@ static u32 CheckForMultiGameAndRegion(u32 CurDICMD, u32 *ISOShift, u32 *BI2regio
 
 static char dev_es[] ATTRIBUTE_ALIGN(32) = "/dev/es";
 
-extern vu32 FoundVersion;
+extern vu32 FoundVersion;		// IOS version.
+static s32 kdData[8] ALIGNED(32);	// Networking.
+
 int main(int argc, char **argv)
 {
 	// Exit after 10 seconds if there is an error
@@ -1524,6 +1526,12 @@ int main(int argc, char **argv)
 
 	DCFlushRange((void*)0x93000000, 0x3000);
 
+	// Initialize networking. (BBA emulation)
+	DCInvalidateRange((void*)0x93006000, 0x4000);
+	memcpy((void*)0x93006000, IOSInterface_bin, IOSInterface_bin_size);
+	*(vs32*)0x93006000 = IOS_Open("/dev/net/ip/top", 0);
+	DCFlushRange((void*)0x93006000, 0x4000);
+
 	DCInvalidateRange((void*)0x93010010, 0x10000);
 	memcpy((void*)0x93010010, loader_stub, 0x1800);
 	memcpy((void*)0x93011810, stub_bin, stub_bin_size);
@@ -1534,7 +1542,7 @@ int main(int argc, char **argv)
 	DCFlushRange((void*)0x93020000, 0x10000);
 
 	DCInvalidateRange((void*)0x93003000, 0x200);
-	//*(vu32*)0x93003000 = currev; //set kernel rev (now in LoadKernel)
+	// *(vu32*)0x93003000 = currev; //set kernel rev (now in LoadKernel)
 	*(vu32*)0x93003008 = 0x80000004; //just some address for SIGetType
 	//0x9300300C is already used for multi-iso
 	memset((void*)0x93003010, 0, 0x190); //clears alot of pad stuff
@@ -1550,7 +1558,29 @@ int main(int argc, char **argv)
 	u32 out = 0;
 	fd = IOS_Open("/dev/net/kd/request", 0);
 	IOS_Ioctl(fd, IOCTL_ExecSuspendScheduler, NULL, 0, &out, 4);
+	// kdData[] initialization for BBA emulation.
+	kdData[0] = -1;
+	do {
+		IOS_Ioctl(fd, 6, NULL, 0, kdData, 0x20);
+	} while (kdData[0] < 0);
 	IOS_Close(fd);
+
+	// BBA: Get our IP address.
+	// FIXME: Verify that we have a connection before doing this.
+	fd = IOS_Open("/dev/net/ip/top", 0);
+	u32 ip = 0;
+	do {
+		ip = IOS_Ioctl(fd, 0x10, 0, 0, 0, 0);
+		usleep(500000);
+	} while (ip == 0);
+	//gprintf("IP: %08X\n", ip);
+	IOS_Close(fd);
+	DCInvalidateRange((void*)0x93026900, 0x200);
+	memset((void*)0x93026900, 0, 0x200);
+	*(vu32*)0x930269A4 = ip;
+	DCFlushRange((void*)0x93026900, 0x200);
+
+
 
 	write16(0xD8B420A, 0); //disable MEMPROT again after reload
 	//u32 level = IRQ_Disable();
@@ -1559,7 +1589,7 @@ int main(int argc, char **argv)
 
 	DVDStartCache(); //waits for kernel start
 	DCInvalidateRange((void*)0x90000000, 0x1000000);
-	memset((void*)(void*)0x90000000, 0, 0x1000000); //clear ARAM
+	memset((void*)0x90000000, 0, 0x1000000); //clear ARAM
 	DCFlushRange((void*)0x90000000, 0x1000000);
 
 	gprintf("Game Start\n");

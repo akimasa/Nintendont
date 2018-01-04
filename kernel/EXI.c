@@ -58,12 +58,13 @@ static u32 SRAMWriteCount = 0;
 static u8 *const FontBuf = (u8*)(0x13100000);
 static u32 IPLReadOffset;
 bool EXI_IRQ = false;
+extern bool SO_IRQ;
 static u32 IRQ_Timer = 0;
 
 // Uncomment this to enable experiental BBA support on SP1.
 #define ENABLE_BBA 1
 #ifdef ENABLE_BBA
-# include "BBA.h"
+//# include "BBA.h"
 #endif
 
 // EXI devices.
@@ -137,8 +138,8 @@ void EXIInit(void)
 	ambbBackupMem = malloca(0x10000, 0x40);
 	memset32(ambbBackupMem, 0xFF, 0x10000);
 
-	memset32((void*)EXI_BASE, 0, 0x20);
-	sync_after_write((void*)EXI_BASE, 0x20);
+	memset32((void*)EXI_BASE, 0, 0x100);
+	sync_after_write((void*)EXI_BASE, 0x100);
 
 	// Initialize SRAM.
 	SRAM_Init();
@@ -156,7 +157,7 @@ void EXIInit(void)
 	{
 #ifdef ENABLE_BBA
 		EXISP1DevType = EXI_DEV_SP1_BBA;
-		BBA_Init();
+		//BBA_Init();
 #else /* !ENABLE_BBA */
 		EXISP1DevType = EXI_DEV_SP1_NONE;
 #endif /* ENABLE_BBA */
@@ -211,14 +212,18 @@ bool EXICheckTimer(void)
 }
 void EXIInterrupt(void)
 {
-	write32( 0x10, IRQ_Cause[0] );
-	write32( 0x14, IRQ_Cause[1] );
-	write32( 0x18, IRQ_Cause[2] );
-	sync_after_write( (void*)0, 0x20 );
-	write32( EXI_INT, 0x10 ); // EXI IRQ
-	sync_after_write( (void*)EXI_INT, 0x20 );
+	write32(EXI_CAUSE_0, IRQ_Cause[0]);
+	write32(EXI_CAUSE_1, IRQ_Cause[1]);
+	write32(EXI_CAUSE_2, IRQ_Cause[2]);
+	sync_after_write((void*)EXI_CAUSE_BASE, 0x60);
+
+	write32(EXI_INT, 0x10); // EXI IRQ
+	sync_after_write((void*)EXI_INT, 0x20);
+
 	write32( HW_IPC_ARMCTRL, 8 ); //throw irq
-	//dbgprintf("EXI Interrupt\r\n");
+#ifdef DEBUG_EXI
+	dbgprintf("EXI Interrupt\r\n");
+#endif /* DEBUG_EXI */
 	EXI_IRQ = false;
 	IRQ_Timer = 0;
 	IRQ_Cause[0] = 0;
@@ -734,41 +739,64 @@ static u32 EXIDeviceTriforceBaseboard(u8 *Data, u32 Length, u32 Mode)
  * @param Length
  * @param Mode
  */
-static u32 EXIDeviceBBA(u32 data, u32 length, u32 mode)
+static u32 EXIDeviceBBA(u32 Data, u32 Length, u32 Mode)
 {
-	if (mode == 1)		// Write
+	// NOTE: BBA EXI handling is mostly unnecessary now,
+	// since we're hooking into the OS functions.
+	// It's only needed for device identification.
+
+	if (Mode == 1)
 	{
-		// EXI Write to Device.
-		BBAImmWrite(data, length);
+		if (Length == 2)
+		{
+			switch ((u32)Data >> 16)
+			{
+				case 0x0000:
+					EXICommand[0] = MEM_READ_ID;
+#ifdef DEBUG_EXI
+					dbgprintf("EXI: ETHGetDeviceID()\r\n");
+#endif /* DEBUG_EXI */
+					break;
+
+#ifdef DEBUG_EXI
+				case 0x8101:
+					dbgprintf("EXI: ETHIRQEnable()\r\n");
+					break;
+
+				case 0x8100:
+					dbgprintf("EXI: ETHIRQDisable()\r\n");
+					break;
+#endif /* DEBUG_EXI */
+			}
+		}
 	}
 	else
 	{
 		// EXI Read from Device.
-		u32 ret = BBAImmRead(length);
-		write32(EXI_CMD_1, ret);
+		switch (EXICommand[0])
+		{
+			case MEM_READ_ID_NINTENDO:
+			case MEM_READ_ID:
+				write32(EXI_CMD_1, EXI_DEVTYPE_ETHER);
+#ifdef DEBUG_EXI
+				dbgprintf("EXI: ETHReadID(%X)\r\n", read32(EXI_CMD_1));
+#endif /* DEBUG_EXI */
+				break;
+
+			default:
+				break;
+		}
 	}
 
 	write32( EXI_CMD_0, 0 );
 	sync_after_write((void*)EXI_BASE, 0x20);
-
-	// TODO: IRQ handling?
-#if 0
-	if( EXIOK == 2 )
-	{
-		//dbgprintf("EXI: Triforce IRQ\r\n");
-		IRQ_Cause[0] = 8;
-		IRQ_Cause[2] = 2;
-		EXI_IRQ = true;
-		IRQ_Timer = read32(HW_TIMER);
-	}
-#endif
 	return 0;
 }
 #endif /* ENABLE_BBA */
 
 void EXIUpdateRegistersNEW( void )
 {
-	if( EXI_IRQ == true ) //still working
+	if( EXI_IRQ || SO_IRQ || (read32(EXI_INT) & 0x2010) ) //still working
 		return;
 
 	//u32 chn, dev, frq, ret, data, len, mode;

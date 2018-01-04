@@ -172,6 +172,7 @@ typedef s32(*ipccallback)(s32 result,void *usrdata);
 #define DI_INT			(INT_BASE+0x20) //0x4
 #define SI_INT			(INT_BASE+0x40) //0x8
 #define EXI_INT			(INT_BASE+0x60) //0x10
+#define EXI_INT_FD		(INT_BASE+0x64) // Socket interface
 
 #define STREAMING		0x13026580
 #define UPDATE_STREAM	0x130265A0

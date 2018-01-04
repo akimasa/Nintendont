@@ -1595,15 +1595,18 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 	PatchFuncInterface( Buffer, Length );
 
 	u32 PatchCount = FPATCH_VideoModes | FPATCH_VIConfigure | FPATCH_getTiming |
-		FPATCH_OSSleepThread | FPATCH_GXBegin | FPATCH_GXDrawDone;
+		FPATCH_GXBegin | FPATCH_GXDrawDone;
 #ifdef CHEATS
 	u32 cheatsWanted = 0, debuggerWanted = 0;
 	if(ConfigGetConfig(NIN_CFG_CHEATS))
 		cheatsWanted = 1;
 	if(!IsWiiU() && ConfigGetConfig(NIN_CFG_DEBUGGER))
 		debuggerWanted = 1;
+	// FIXME: Disabled for BBA testing.
+#if 0
 	if(cheatsWanted || debuggerWanted)
 		PatchCount &= ~FPATCH_OSSleepThread;
+#endif
 	/* So this can be used but for now we just use PADRead */
 	/*if( (IsWiiU() && ConfigGetConfig(NIN_CFG_CHEATS)) ||
 		(!IsWiiU() && ConfigGetConfig(NIN_CFG_DEBUGGER|NIN_CFG_CHEATS)) )
@@ -1659,7 +1662,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 		CurFPatternsListLen++;
 	}
 	/* Cheats */
-	u32 OSSleepThreadHook = 0;
+	u32 OSSleepThread = 0, OSSleepThreadHook = 0, OSWakeupThread = 0;
 	u32 PADHook = 0;
 	//u32 DebuggerHook = 0, DebuggerHook2 = 0, DebuggerHook3 = 0;
 	/* SI Inited Patch */
@@ -1740,18 +1743,15 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 					{
 						// EXI Device 0 Control Register
 						write32A( (u32)Buffer+i+0x114, 0x3C60C000, 0x3C60CC00, 1 );
-						write32A( (u32)Buffer+i+0x118, 0x80830010, 0x80836800, 1 );
+						write32A( (u32)Buffer+i+0x118, 0x80830BA0, 0x80836800, 1 );
 						// EXI Device 1 Control Register
 						write32A( (u32)Buffer+i+0x14C, 0x3C60C000, 0x3C60CC00, 1 );
 						write32A( (u32)Buffer+i+0x150, 0x38630014, 0x38636800, 1 );
 						write32A( (u32)Buffer+i+0x154, 0x80830000, 0x80830014, 1 );
-						if(TRIGame)
-						{
-							// EXI Device 2 Control Register (Trifroce)
-							write32A( (u32)Buffer+i+0x188, 0x3C60C000, 0x3C60CC00, 1 );
-							write32A( (u32)Buffer+i+0x18C, 0x38630018, 0x38636800, 1 );
-							write32A( (u32)Buffer+i+0x190, 0x80830000, 0x80830028, 1 );
-						}
+						// EXI Device 2 Control Register (TriForce, BBA/SO)
+						write32A( (u32)Buffer+i+0x188, 0x3C60C000, 0x3C60CC00, 1 );
+						write32A( (u32)Buffer+i+0x18C, 0x38630BE0, 0x38636800, 1 );
+						write32A( (u32)Buffer+i+0x190, 0x80830000, 0x80830028, 1 );
 					}
 					if (!Datel) // Multiples in Datel discs
 						PatchCount |= FPATCH_OSDispatchIntr;
@@ -1766,7 +1766,7 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 					{
 						// EXI Device 0 Control Register
 						write32A( (u32)Buffer+i+0x138, 0x3C60C000, 0x3C60CC00, 1 );
-						write32A( (u32)Buffer+i+0x13C, 0x83C30010, 0x83C36800, 1 );
+						write32A( (u32)Buffer+i+0x13C, 0x83C30BA0, 0x83C36800, 1 );
 					}
 					PatchCount |= FPATCH_OSDispatchIntr;
 					i = GotoFuncEnd(i, (u32)Buffer);
@@ -1992,9 +1992,17 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 					( read32((u32)Buffer + i + 8 ) == 0x38000004 || read32((u32)Buffer + i + 8 ) == 0x808400E4 ) )
 				{
 					PatchCount |= FPATCH_OSSleepThread;
+					OSSleepThread = (u32)Buffer + GotoFuncStart(i, (u32)Buffer);
+					printpatchfound("OSSleepThread", NULL, OSSleepThread);
 					i = GotoFuncEnd(i, (u32)Buffer);
 					OSSleepThreadHook = (u32)Buffer + i;
-					printpatchfound("Hook:OSSleepThread",NULL,(u32)Buffer + i);
+					OSWakeupThread = OSSleepThreadHook + 4;
+					write32(0x130269B0, OSSleepThread | (1 << 31));
+					write32(0x130269B4, OSWakeupThread | (1 << 31));
+					write32(0x130269B8, 0x800E87C8);	// __OSSetInterruptHandler
+					write32(0x130269BC, 0x800E8BCC);	//__OSUnmaskInterrupts
+					sync_after_write((void*)0x130269A0, 0x20);
+					printpatchfound("OSWakeupThread", NULL, OSWakeupThread);
 					continue;
 				}
 			}
@@ -3074,6 +3082,94 @@ void DoPatches( char *Buffer, u32 Length, u32 DiscOffset )
 							{
 								printpatchfound("Datel", "FakeEntry", FOffset + 0xC8);
 								PatchBL(PATCH_OFFSET_ENTRY, FOffset + 0xC8);
+							}
+							else
+								CurPatterns[j].Found = 0;
+						} break;
+
+						// BBA: Network emulation.
+						case FCODE_SOInit:
+						{
+							if(read32(FOffset + 0x18) == 0x38000001 && read32(FOffset + 0x2C) == 0x38600004
+								&& read32(FOffset + 0x5C) == 0x38000001)
+							{
+								memcpy((void*)FOffset, SOInit, SOInit_size);
+								u32 hspAddr = PatchCopy(HSPInterruptHandler, HSPInterruptHandler_size);
+								W16(FOffset+0x36,(u16)((hspAddr>>16)|0x8000));
+								W16(FOffset+0x3A,(u16)(hspAddr&0xFFFF));
+								printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset);
+							}
+							else
+								CurPatterns[j].Found = 0;
+						} break;
+						case FCODE_SOStartup:
+						{
+							memcpy((void*)FOffset, SOStartup, SOStartup_size);
+							write32(FOffset+0xAC, read32(FOffset+0x410)); //startup status
+							printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset);
+						} break;
+						case FCODE_IFInit:
+						{	
+							write32(FOffset+0x14C, 0x38600001);
+							write32(FOffset+0x17C, 0x60000000);
+							//write32(FOffset,   0x38600001);
+							//write32(FOffset+4, 0x4E800020);
+							printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset);
+						} break;
+						case FCODE_IPGetAddr:
+						{
+							if(read32(FOffset + 0x24) == 0x7C7F1B78 && read32(FOffset + 0x40) == 0x389F0044
+								&& read32(FOffset + 0x44) == 0x38A00004)
+							{
+								memcpy((void*)FOffset, IPGetAddr, IPGetAddr_size);
+								printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset);
+							}
+							else
+								CurPatterns[j].Found = 0;
+						} break;
+						case FCODE_IPGetLinkState:
+						{
+							if(read32(FOffset + 0x20) == 0x7C7F1B78 && read32(FOffset + 0x34) == 0x801F0004
+								&& read32(FOffset + 0x38) == 0x901E0000)
+							{
+								memcpy((void*)FOffset, IPGetLinkState, IPGetLinkState_size);
+								printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset);
+							}
+							else
+								CurPatterns[j].Found = 0;
+						} break;
+						case FCODE_IPGetConfigError:
+						{
+							if(read32(FOffset) == 0x28030000 && read32(FOffset + 8) == 0x4800000C
+								&& read32(FOffset + 0x14) == 0x80630008)
+							{
+								memcpy((void*)FOffset, IPGetConfigError, IPGetConfigError_size);
+								printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset);
+							}
+							else
+								CurPatterns[j].Found = 0;
+						} break;
+						case FCODE_ETHGetMACAddr:
+						{
+							if(read32(FOffset + 0x8) == 0x90010004 && read32(FOffset + 0xC) == 0x38A00006
+								&& read32(FOffset + 0x10) == 0x9421FFF8)
+							{
+								memcpy((void*)FOffset, ETHGetMACAddr, ETHGetMACAddr_size);
+								printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset);
+							}
+							else
+								CurPatterns[j].Found = 0;
+						} break;
+						case FCODE_ETHGetLinkStateAsync:
+						{
+							if(read32(FOffset + 0x1C) == 0x38600000 && read32(FOffset + 0x24) == 0x2C030000
+								&& read32(FOffset + 0x30) == 0x38600031)
+							{
+								write32(FOffset,       0x7c641b78); // mr r4,r3
+								write32(FOffset + 0x4, 0x38600001); // li r3,1
+								write32(FOffset + 0x8, 0x90640000); // stw r3,0(r4)
+								write32(FOffset + 0xC, 0x4E800020); // blr
+								printpatchfound(CurPatterns[j].Name, CurPatterns[j].Type, FOffset);
 							}
 							else
 								CurPatterns[j].Found = 0;

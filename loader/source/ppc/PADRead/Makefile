@@ -6,7 +6,7 @@ endif
 include $(DEVKITPPC)/wii_rules
 #---------------------------------------------------------------------------------
 TARGET	:= PADReadGC
-BUILD	:= ../../data
+BUILD	:= ../../../data
 OUTPUT	:= $(BUILD)/$(TARGET).bin
 #---------------------------------------------------------------------------------
 CFLAGS	:= -Os -Wall -s -nostartfiles -mhard-float -T openstub.ld
@@ -16,11 +16,13 @@ OCFLAGS	:= -S -O binary
 
 all: $(OUTPUT)
 
-$(OUTPUT): $(TARGET).c
+$(TARGET).elf: $(TARGET).c
 	@echo " COMPILE     $<"
 	@$(CC) $(CFLAGS) $^ -o $@
+
+$(OUTPUT): $(TARGET).elf
 	@echo " OBJCOPY     $(TARGET).bin"
-	@$(OBJCOPY) $(OCFLAGS) $@
-	
+	@$(OBJCOPY) $(OCFLAGS) $^ $@
+
 clean:
-	@rm -fr $(BUILD)/$(TARGET).bin
+	rm -fr $(TARGET).elf $(BUILD)/$(TARGET).bin

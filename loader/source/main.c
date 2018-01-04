@@ -41,6 +41,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "kernelboot_bin.h"
 #include "multidol_ldr_bin.h"
 #include "stub_bin.h"
+#include "IOSInterface_bin.h"
 #include "titles.h"
 #include "ipl.h"
 #include "HID.h"

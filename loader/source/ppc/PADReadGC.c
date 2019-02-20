@@ -38,6 +38,7 @@ static u32 PrevDRCButton = 0;
 
 static u8 OffsetX[NIN_CFG_MAXPAD] = {0};
 static u8 OffsetY[NIN_CFG_MAXPAD] = {0};
+static u8 ControllerInitialized[NIN_CFG_MAXPAD] = {0};
 
 #define DRC_SWAP (1<<16)
 
@@ -316,10 +317,11 @@ u32 _start(u32 calledByGame)
 			{
 				goto DoExit;
 			}
-			if((Pad[chan].button&0x1c00) == 0x1c00)
+			if((Pad[chan].button&0x1c00) == 0x1c00 || ControllerInitialized[chan] == 0)
 			{
 				OffsetX[chan] = Pad[chan].stickX;
 				OffsetY[chan] = Pad[chan].stickY;
+				ControllerInitialized[chan] = 1;
 			}
 			Pad[chan].stickX -= OffsetX[chan];
 			Pad[chan].stickY -= OffsetY[chan];
@@ -577,10 +579,11 @@ u32 _start(u32 calledByGame)
 			stickY		= HID_Packet[HID_CTRL->StickY.Offset] - 128;	//raw EE ED EC ... 82 81 80 7F 7E ... 1A 19 18 (up, center, down)
 			substickX	= HID_Packet[HID_CTRL->CStickX.Offset] - 128;	//raw 22 23 24 ... 7F 80 81 ... D2 D3 D4 (left ... center ... right)
 			substickY	= HID_Packet[HID_CTRL->CStickY.Offset] - 128;	//raw DB DA D9 ... 81 80 7F ... 2B 2A 29 (up, center, down)
-			if((Pad[chan].button&0x1c00) == 0x1c00)
+			if((Pad[chan].button&0x1c00) == 0x1c00 || ControllerInitialized[chan] == 0)
 			{
 				OffsetX[chan] = stickX;
 				OffsetY[chan] = stickY;
+				ControllerInitialized[chan] = 1;
 			}
 			stickX -= OffsetX[chan];
 			stickY -= OffsetY[chan];
@@ -1380,10 +1383,11 @@ u32 _start(u32 calledByGame)
 		{
 			goto DoExit;
 		}
-		if((Pad[chan].button&0x1c00) == 0x1c00)
+		if((Pad[chan].button&0x1c00) == 0x1c00 || ControllerInitialized[chan] == 0)
 		{
 			OffsetX[chan] = Pad[chan].stickX;
 			OffsetY[chan] = Pad[chan].stickY;
+			ControllerInitialized[chan] = 1;
 		}
 		Pad[chan].stickX -= OffsetX[chan];
 		Pad[chan].stickY -= OffsetY[chan];

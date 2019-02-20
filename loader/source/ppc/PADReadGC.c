@@ -577,6 +577,13 @@ u32 _start(u32 calledByGame)
 			stickY		= HID_Packet[HID_CTRL->StickY.Offset] - 128;	//raw EE ED EC ... 82 81 80 7F 7E ... 1A 19 18 (up, center, down)
 			substickX	= HID_Packet[HID_CTRL->CStickX.Offset] - 128;	//raw 22 23 24 ... 7F 80 81 ... D2 D3 D4 (left ... center ... right)
 			substickY	= HID_Packet[HID_CTRL->CStickY.Offset] - 128;	//raw DB DA D9 ... 81 80 7F ... 2B 2A 29 (up, center, down)
+			if((Pad[chan].button&0x1c00) == 0x1c00)
+			{
+				OffsetX[chan] = stickX;
+				OffsetY[chan] = stickY;
+			}
+			stickX -= OffsetX[chan];
+			stickY -= OffsetY[chan];
 		}
 		else	//standard sticks
 		{
@@ -1353,8 +1360,6 @@ u32 _start(u32 calledByGame)
 		}	
 		
 		Pad[chan].button = button;
-		Pad[chan].stickX -= 10;
-		Pad[chan].stickY += 30;
 
 //#define DEBUG_cStick	1
 		#ifdef DEBUG_cStick
@@ -1375,6 +1380,13 @@ u32 _start(u32 calledByGame)
 		{
 			goto DoExit;
 		}
+		if((Pad[chan].button&0x1c00) == 0x1c00)
+		{
+			OffsetX[chan] = Pad[chan].stickX;
+			OffsetY[chan] = Pad[chan].stickY;
+		}
+		Pad[chan].stickX -= OffsetX[chan];
+		Pad[chan].stickY -= OffsetY[chan];
 		if((Pad[chan].button&0x1030) == 0x1030)	//reset by pressing start, Z, R
 		{
 			/* reset status 3 */

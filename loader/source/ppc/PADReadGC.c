@@ -36,6 +36,9 @@ static u32 PrevAdapterChannel3 = 0;
 static u32 PrevAdapterChannel4 = 0;
 static u32 PrevDRCButton = 0;
 
+static u8 OffsetX[NIN_CFG_MAXPAD] = {0};
+static u8 OffsetY[NIN_CFG_MAXPAD] = {0};
+
 #define DRC_SWAP (1<<16)
 
 const s8 DEADZONE = 0x1A;
@@ -313,6 +316,13 @@ u32 _start(u32 calledByGame)
 			{
 				goto DoExit;
 			}
+			if((Pad[chan].button&0x1c00) == 0x1c00)
+			{
+				OffsetX[chan] = Pad[chan].stickX;
+				OffsetY[chan] = Pad[chan].stickY;
+			}
+			Pad[chan].stickX -= OffsetX[chan];
+			Pad[chan].stickY -= OffsetY[chan];
 			if((Pad[chan].button&0x1030) == 0x1030)	//reset by pressing start, Z, R
 			{
 				/* reset status 3 */
@@ -1343,6 +1353,8 @@ u32 _start(u32 calledByGame)
 		}	
 		
 		Pad[chan].button = button;
+		Pad[chan].stickX -= 10;
+		Pad[chan].stickY += 30;
 
 //#define DEBUG_cStick	1
 		#ifdef DEBUG_cStick

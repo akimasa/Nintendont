@@ -58,27 +58,40 @@ static u32 SRAMWriteCount = 0;
 static u8 *const FontBuf = (u8*)(0x13100000);
 static u32 IPLReadOffset;
 bool EXI_IRQ = false;
+extern bool SO_IRQ;
 static u32 IRQ_Timer = 0;
+
+// Uncomment this to enable experiental BBA support on SP1.
+#define ENABLE_BBA 1
+#ifdef ENABLE_BBA
+//# include "BBA.h"
+#endif
 
 // EXI devices.
 // Low 2 bits: Device number. (0-2)
 // High 2 bits: Channel number. (0-2)
 // Reference: http://hitmen.c02.at/files/yagcd/yagcd/chap10.html
 #define EXI_DEVICE_NUMBER(chn, dev) (((chn)<<2)|((dev)&0x3))
-enum EXIDevice
+typedef enum
 {
 	EXI_DEV_NONE			= -1,
 	EXI_DEV_MEMCARD_A		= EXI_DEVICE_NUMBER(0, 0),
 	EXI_DEV_MASK_ROM_RTC_SRAM_UART	= EXI_DEVICE_NUMBER(0, 1),
 	EXI_DEV_SP1			= EXI_DEVICE_NUMBER(0, 2),
-	EXI_DEV_ETH			= EXI_DEV_SP1,
-	EXI_DEV_BASEBOARD		= EXI_DEV_SP1,
 	EXI_DEV_MEMCARD_B		= EXI_DEVICE_NUMBER(1, 0),
 	EXI_DEV_AD16			= EXI_DEVICE_NUMBER(2, 0),
-};
+} EXIDevice;
+
+// EXI SP1 device type.
+typedef enum
+{
+	EXI_DEV_SP1_NONE		= 0,
+	EXI_DEV_SP1_TRIFORCE_BASEBOARD,
+	EXI_DEV_SP1_BBA,
+} EXISP1Device;
 
 // EXI commands.
-enum EXICommands
+typedef enum
 {
 	MEM_READ_ID		= 1,
 	MEM_READ_ID_NINTENDO,
@@ -105,7 +118,10 @@ enum EXICommands
 	SRAM_WRITE,
 
 	IPL_READ_FONT,
-};
+} EXICommands;
+
+// SP1 device type.
+static u32 EXISP1DevType = EXI_DEV_SP1_NONE;
 
 extern vu32 TRIGame;
 static u32 TRIBackupOffset= 0;
@@ -122,14 +138,30 @@ void EXIInit(void)
 	ambbBackupMem = malloca(0x10000, 0x40);
 	memset32(ambbBackupMem, 0xFF, 0x10000);
 
-	memset32((void*)EXI_BASE, 0, 0x20);
-	sync_after_write((void*)EXI_BASE, 0x20);
+	memset32((void*)EXI_BASE, 0, 0x100);
+	sync_after_write((void*)EXI_BASE, 0x100);
 
 	// Initialize SRAM.
 	SRAM_Init();
 
 	// Clear the "Slot B" configuration bit initially.
 	ncfg->Config &= ~NIN_CFG_MC_SLOTB;
+
+	// Set the SP1 device.
+	// TODO: Option to disable BBA.
+	if (TRIGame != 0)
+	{
+		EXISP1DevType = EXI_DEV_SP1_TRIFORCE_BASEBOARD;
+	}
+	else
+	{
+#ifdef ENABLE_BBA
+		EXISP1DevType = EXI_DEV_SP1_BBA;
+		//BBA_Init();
+#else /* !ENABLE_BBA */
+		EXISP1DevType = EXI_DEV_SP1_NONE;
+#endif /* ENABLE_BBA */
+	}
 
 	// EXI has been initialized.
 	exi_inited = true;
@@ -180,14 +212,18 @@ bool EXICheckTimer(void)
 }
 void EXIInterrupt(void)
 {
-	write32( 0x10, IRQ_Cause[0] );
-	write32( 0x14, IRQ_Cause[1] );
-	write32( 0x18, IRQ_Cause[2] );
-	sync_after_write( (void*)0, 0x20 );
-	write32( EXI_INT, 0x10 ); // EXI IRQ
-	sync_after_write( (void*)EXI_INT, 0x20 );
+	write32(EXI_CAUSE_0, IRQ_Cause[0]);
+	write32(EXI_CAUSE_1, IRQ_Cause[1]);
+	write32(EXI_CAUSE_2, IRQ_Cause[2]);
+	sync_after_write((void*)EXI_CAUSE_BASE, 0x60);
+
+	write32(EXI_INT, 0x10); // EXI IRQ
+	sync_after_write((void*)EXI_INT, 0x20);
+
 	write32( HW_IPC_ARMCTRL, 8 ); //throw irq
-	//dbgprintf("EXI Interrupt\r\n");
+#ifdef DEBUG_EXI
+	dbgprintf("EXI Interrupt\r\n");
+#endif /* DEBUG_EXI */
 	EXI_IRQ = false;
 	IRQ_Timer = 0;
 	IRQ_Cause[0] = 0;
@@ -527,7 +563,13 @@ static u32 EXIDevice_ROM_RTC_SRAM_UART(u8 *Data, u32 Length, u32 Mode)
 	return 1;
 }
 
-u32 EXIDeviceSP1( u8 *Data, u32 Length, u32 Mode )
+/**
+ * Process a Triforce Baseboard command.
+ * @param Data
+ * @param Length
+ * @param Mode
+ */
+static u32 EXIDeviceTriforceBaseboard(u8 *Data, u32 Length, u32 Mode)
 {
 	u32 EXIOK = 0;
 
@@ -690,9 +732,71 @@ u32 EXIDeviceSP1( u8 *Data, u32 Length, u32 Mode )
 	return 0;
 }
 
+#ifdef ENABLE_BBA
+/**
+ * Process a BBA command.
+ * @param Data
+ * @param Length
+ * @param Mode
+ */
+static u32 EXIDeviceBBA(u32 Data, u32 Length, u32 Mode)
+{
+	// NOTE: BBA EXI handling is mostly unnecessary now,
+	// since we're hooking into the OS functions.
+	// It's only needed for device identification.
+
+	if (Mode == 1)
+	{
+		if (Length == 2)
+		{
+			switch ((u32)Data >> 16)
+			{
+				case 0x0000:
+					EXICommand[0] = MEM_READ_ID;
+#ifdef DEBUG_EXI
+					dbgprintf("EXI: ETHGetDeviceID()\r\n");
+#endif /* DEBUG_EXI */
+					break;
+
+#ifdef DEBUG_EXI
+				case 0x8101:
+					dbgprintf("EXI: ETHIRQEnable()\r\n");
+					break;
+
+				case 0x8100:
+					dbgprintf("EXI: ETHIRQDisable()\r\n");
+					break;
+#endif /* DEBUG_EXI */
+			}
+		}
+	}
+	else
+	{
+		// EXI Read from Device.
+		switch (EXICommand[0])
+		{
+			case MEM_READ_ID_NINTENDO:
+			case MEM_READ_ID:
+				write32(EXI_CMD_1, EXI_DEVTYPE_ETHER);
+#ifdef DEBUG_EXI
+				dbgprintf("EXI: ETHReadID(%X)\r\n", read32(EXI_CMD_1));
+#endif /* DEBUG_EXI */
+				break;
+
+			default:
+				break;
+		}
+	}
+
+	write32( EXI_CMD_0, 0 );
+	sync_after_write((void*)EXI_BASE, 0x20);
+	return 0;
+}
+#endif /* ENABLE_BBA */
+
 void EXIUpdateRegistersNEW( void )
 {
-	if( EXI_IRQ == true ) //still working
+	if( EXI_IRQ || SO_IRQ || (read32(EXI_INT) & 0x2010) ) //still working
 		return;
 
 	//u32 chn, dev, frq, ret, data, len, mode;
@@ -779,7 +883,20 @@ void EXIUpdateRegistersNEW( void )
 						break;
 
 					case EXI_DEV_SP1:
-						EXIDeviceSP1( (u8*)data, len, mode );
+#ifdef DEBUG_SRAM
+						hexdump( ptr, len );
+#endif
+						switch (EXISP1DevType)
+						{
+							case EXI_DEV_SP1_TRIFORCE_BASEBOARD:
+								EXIDeviceTriforceBaseboard((u8*)data, len, mode);
+								break;
+							case EXI_DEV_SP1_BBA:
+								EXIDeviceBBA(data, len, mode);
+								break;
+							default:
+								break;
+						}
 						break;
 
 					default:
@@ -818,7 +935,17 @@ void EXIUpdateRegistersNEW( void )
 #ifdef DEBUG_SRAM
 						hexdump( ptr, len );
 #endif
-						EXIDeviceSP1( ptr, len, mode );
+						switch (EXISP1DevType)
+						{
+							case EXI_DEV_SP1_TRIFORCE_BASEBOARD:
+								EXIDeviceTriforceBaseboard(ptr, len, mode);
+								break;
+							case EXI_DEV_SP1_BBA:
+								EXIDeviceBBA((u32)ptr, len, mode);
+								break;
+							default:
+								break;
+						}
 						break;
 
 					default:

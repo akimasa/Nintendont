@@ -58,6 +58,24 @@
 
 #include "asm/codehandler_stub.h"
 
+#include "asm/net/SOInit.h"
+#include "asm/net/SOStartup.h"
+#include "asm/net/SOSocket.h"
+#include "asm/net/SOBind.h"
+#include "asm/net/SOFcntl.h"
+#include "asm/net/SOListen.h"
+#include "asm/net/SOAccept.h"
+#include "asm/net/SOPoll.h"
+#include "asm/net/SORecvFrom.h"
+#include "asm/net/SOSendTo.h"
+#include "asm/net/__SOClose.h"
+#include "asm/net/__SOSetSockOpt.h"
+#include "asm/net/IPGetLinkState.h"
+#include "asm/net/IPGetAddr.h"
+#include "asm/net/IPGetConfigError.h"
+#include "asm/net/ETHGetMACAddr.h"
+#include "asm/HSPInterruptHandler.h"
+
 //this is the data from my wii disk drive
 const u8 DiskDriveInfo[32] = {
 	0x00,0x00,0x00,0x02,

@@ -7,7 +7,7 @@
 #include "debug.h"
 #include "EXI.h"
 extern vu32 TRIGame;
-bool SO_IRQ = false;
+volatile bool SO_IRQ = false;
 extern bool EXI_IRQ;
 int soIrqFd = 0;
 static struct ipcmessage *sockmsg[5] = { NULL, NULL, NULL, NULL, NULL };
@@ -82,8 +82,11 @@ u8 *SODataBuf[5] = { NULL, NULL, NULL, NULL, NULL };
 static u32 SO_Thread = 0;
 u8 *soheap = NULL;
 extern char __so_stack_addr, __so_stack_size;
-int sockFd, ncdFd;
+// int sockFd, ncdFd;
+static s32 ALIGNED(32) sockFd;
+static s32 ALIGNED(32) ncdFd;
 u32 sockTimer;
+static s8 dumphoge = 0;
 void SOCKInit()
 {
 	int i;
@@ -182,12 +185,15 @@ void SOCKUpdateRegisters()
 	{
 		int bPos = (i<<5);
 		sync_before_read((void*)(SO_BASE+bPos), 0x20);
-		u32 ioctl = read32(SO_IOCTL+bPos);
+		u32 ALIGNED(32) ioctl = read32(SO_IOCTL+bPos);
 		u32 optCmd, optLen, pollNum, dataLen;
 		if(ioctl)
 		{
 			if(soBusy[i])
 			{
+					if(dumphoge){
+						dbgprintf("sobusy[%d]:%d\r\n", i,soBusy[i]);
+					}
 				if(sockintr[i] == 0)
 					continue;
 				dbgprintf("result cmd for %i is %i\r\n",i,ioctl);
@@ -333,9 +339,11 @@ void SOCKUpdateRegisters()
 							memcpy(bindParams[i]->name, (void*)(SO_CMD_1+bPos), 8);
 							sync_after_write(bindParams[i],0x40);
 							dbgprintf("SOBind %i %08x %i\r\n",read32(SO_CMD_0+bPos),read32(SO_CMD_1+bPos),read32(SO_CMD_2+bPos));
+							dbgprintf("SOBind2 %08x %08x %08x\r\n",read32(SO_CMD_1+bPos),read32(SO_CMD_1+bPos+4),read32(SO_CMD_1+bPos+8));
 							sockmsg[i]->seek.origin = i;
 							IOS_IoctlAsync(sockFd, ioctl, bindParams[i], sizeof(struct bind_params), NULL, 0, sockqueue, sockmsg[i]);
 							soBusy[i] = 1;
+							dumphoge = 1;
 							break;
 						case 0x03:
 							SOParams[i][0] = read32(SO_CMD_0+bPos);
@@ -505,6 +513,7 @@ void SOCKUpdateRegisters()
 							write32(SO_IOCTL+bPos, 0);
 							sync_after_write((void*)(SO_BASE+bPos), 0x20);
 						default:
+							dbgprintf("Unknown CMD? %i\r\n", ioctl);
 							break;
 					}
 				}

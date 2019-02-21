@@ -14,7 +14,7 @@ HostId:
 	lis r3,SO_IP_ADDR@h
 	ori r3, r3, SO_IP_ADDR@l
 	li r0, 0
-	dcbi r0, r3
+	dcbi 0, r3
 	sync
 	lwz r3, 0(r3)
 storeIp:

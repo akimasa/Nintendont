@@ -4,6 +4,7 @@
 *.elf
 codehandler/*.h
 kernel/asm/*.h
+kernel/asm/net/*.h
 kernel/kernel.map
 loader/build/
 loader/data/kernel.zip

@@ -27,6 +27,8 @@ static u32 SOCKAlarm()
 		//dbgprintf("sock %08x msg\r\n",sock);
 		sockres[sock] = msg->result;
 		sockintr[sock] = 1;
+		sync_after_write(&sockintr, 0x20);
+		sync_after_write(&sockres, 0x20);
 		mqueue_ack(msg, 0);
 	}
 	return 0;
@@ -177,9 +179,15 @@ void SOCKUpdateRegisters()
 		sync_before_read((void*)0x130269A0,0x20);
 		write32(0x130269A0, read32(0x130269A4));
 		sync_after_write((void*)0x130269A0,0x20);
+		dumphoge = 1;
+		mdelay(100);
 	}
 	if( EXI_IRQ == true || SO_IRQ == true || (read32(EXI_INT) & 0x2010) ) //still working
-		return;
+	{
+		if (dumphoge)
+			dbgprintf("still working:%d,%d,%d,timer:%d\r\n",EXI_IRQ,SO_IRQ,(read32(EXI_INT) & 0x2010),read32(HW_TIMER));
+		// return;
+	}
 	int i, j;
 	for(i = 0; i < 5; i++)
 	{
@@ -191,9 +199,7 @@ void SOCKUpdateRegisters()
 		{
 			if(soBusy[i])
 			{
-					if(dumphoge){
-						dbgprintf("sobusy[%d]:%d\r\n", i,soBusy[i]);
-					}
+
 				if(sockintr[i] == 0)
 					continue;
 				dbgprintf("result cmd for %i is %i\r\n",i,ioctl);
@@ -339,11 +345,10 @@ void SOCKUpdateRegisters()
 							memcpy(bindParams[i]->name, (void*)(SO_CMD_1+bPos), 8);
 							sync_after_write(bindParams[i],0x40);
 							dbgprintf("SOBind %i %08x %i\r\n",read32(SO_CMD_0+bPos),read32(SO_CMD_1+bPos),read32(SO_CMD_2+bPos));
-							dbgprintf("SOBind2 %08x %08x %08x\r\n",read32(SO_CMD_1+bPos),read32(SO_CMD_1+bPos+4),read32(SO_CMD_1+bPos+8));
+							dbgprintf("SOBind2 %08x %08x %08x,timer:%d\r\n",read32(SO_CMD_1+bPos),read32(SO_CMD_1+bPos+4),read32(SO_CMD_1+bPos+8),read32(HW_TIMER));
 							sockmsg[i]->seek.origin = i;
 							IOS_IoctlAsync(sockFd, ioctl, bindParams[i], sizeof(struct bind_params), NULL, 0, sockqueue, sockmsg[i]);
 							soBusy[i] = 1;
-							dumphoge = 1;
 							break;
 						case 0x03:
 							SOParams[i][0] = read32(SO_CMD_0+bPos);

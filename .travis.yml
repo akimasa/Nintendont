@@ -7,4 +7,8 @@ before_install:
 - docker pull devkitpro/devkitppc
 script:
 - docker run --privileged -v /home/travis/build/akimasa/Nintendont:/root/ devkitpro/devkitppc /bin/bash /root/travis.sh
+addons:
+  artifacts:
+    target_paths:
+    - /home/travis/build/akimasa/Nintendont/loader/loader.dol
 

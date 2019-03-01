@@ -1,1 +1,2 @@
-bash /root/Build.sh
+cd /root/
+bash Build.sh

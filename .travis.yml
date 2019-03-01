@@ -19,5 +19,6 @@ deploy:
     - /home/travis/build/akimasa/Nintendont/loader/loader.dol
   on:
     all_branches: true
+    tags: false
 skip_cleanup: true
 

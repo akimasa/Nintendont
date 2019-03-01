@@ -17,5 +17,7 @@ deploy:
   api_key: $GITHUB_OAUTH_TOKEN
   file:
     - /home/travis/build/akimasa/Nintendont/loader/loader.dol
+  on:
+    all_branches: true
 skip_cleanup: true
 

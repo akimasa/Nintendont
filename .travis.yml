@@ -21,4 +21,6 @@ deploy:
     all_branches: true
     tags: false
   skip_cleanup: true
-
+branches:
+    except:
+      - /^v0-/

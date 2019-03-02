@@ -20,5 +20,5 @@ deploy:
   on:
     all_branches: true
     tags: false
-skip_cleanup: true
+  skip_cleanup: true
 

@@ -4,7 +4,23 @@ services:
   - docker
 
 before_install:
-- docker pull devkitpro/devkitppc
+- docker pull akimasa/devkitpro
 script:
-- docker run --privileged -v /home/travis/build/akimasa/Nintendont:/root/ devkitpro/devkitppc /bin/bash /root/travis.sh
-
+- docker run --privileged -v /home/travis/build/akimasa/Nintendont:/root/ akimasa/devkitpro /bin/bash /root/travis.sh
+before_deploy:
+  - git config --local user.name "Akimasa Tateba"
+  - git config --local user.email "akimasa@gmail.com"
+  - export TRAVIS_TAG="v0-$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1)"
+  - git tag $TRAVIS_TAG
+deploy:
+  provider: releases
+  api_key: $GITHUB_OAUTH_TOKEN
+  file:
+    - /home/travis/build/akimasa/Nintendont/loader/loader.dol
+  on:
+    all_branches: true
+    tags: false
+  skip_cleanup: true
+branches:
+    except:
+      - /^v0-/

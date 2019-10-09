@@ -1,2 +1,4 @@
+cd /root/kernel/bin2h/
+bash make.sh
 cd /root/
-bash /root/Build.sh
+bash Build.sh

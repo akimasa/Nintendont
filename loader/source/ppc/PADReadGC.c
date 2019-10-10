@@ -39,6 +39,9 @@ static u32 PrevDRCButton = 0;
 static u8 OffsetX[NIN_CFG_MAXPAD] = {0};
 static u8 OffsetY[NIN_CFG_MAXPAD] = {0};
 
+static u8 OffsetCX[NIN_CFG_MAXPAD] = {0};
+static u8 OffsetCY[NIN_CFG_MAXPAD] = {0};
+
 #define DRC_SWAP (1<<16)
 
 const s8 DEADZONE = 0x1A;
@@ -320,9 +323,13 @@ u32 _start(u32 calledByGame)
 			{
 				OffsetX[chan] = Pad[chan].stickX;
 				OffsetY[chan] = Pad[chan].stickY;
+				OffsetCX[chan] = Pad[chan].substickX;
+				OffsetCY[chan] = Pad[chan].substickY;
 			}
 			Pad[chan].stickX -= OffsetX[chan];
 			Pad[chan].stickY -= OffsetY[chan];
+			Pad[chan].substickX -= OffsetCX[chan];
+			Pad[chan].substickY -= OffsetCY[chan];
 			if((Pad[chan].button&0x1030) == 0x1030)	//reset by pressing start, Z, R
 			{
 				/* reset status 3 */
@@ -581,9 +588,13 @@ u32 _start(u32 calledByGame)
 			{
 				OffsetX[chan] = stickX;
 				OffsetY[chan] = stickY;
+				OffsetCX[chan] = substickX;
+				OffsetCY[chan] = substickY;
 			}
 			stickX -= OffsetX[chan];
 			stickY -= OffsetY[chan];
+			substickX -= OffsetCX[chan];
+			substickY -= OffsetCY[chan];
 		}
 		else	//standard sticks
 		{

@@ -1,0 +1,34 @@
+name: Automated Build
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build Nintendont with Docker
+      run: docker run --privileged -v $(pwd):/root/ akimasa/devkitpro /bin/bash /root/travis.sh
+    - name: Create Release
+      id: create_release
+      uses: akimasa/create-release@v2.0.2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v1-${{ github.sha }}
+        release_name: v1
+        target_commitish: ${{ github.sha }}
+        draft: false
+        prerelease: false
+    - name: Upload Release Asset
+      id: upload-release-asset 
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+        asset_path: ./loader/loader.dol
+        asset_name: loader.dol
+        asset_content_type: application/octet-stream

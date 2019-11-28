@@ -19,6 +19,7 @@ jobs:
       with:
         tag_name: v1-${{ github.sha }}
         release_name: v1
+        target_commitish: ${{ github.sha }}
         draft: false
         prerelease: false
     - name: Upload Release Asset

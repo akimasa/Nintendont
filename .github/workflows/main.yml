@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Build Nintendont with Docker
-      run: docker run --privileged -v $(pwd):/root/ akimasa/devkitpro /bin/bash /root/travis.sh
+      run: docker run --privileged -v $(pwd):/root/ docker.pkg.github.com/akimasa/nintendont/devkitpro:1 /bin/bash /root/travis.sh
     - name: Create Release
       id: create_release
       uses: akimasa/create-release@v2.0.2

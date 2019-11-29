@@ -9,12 +9,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-    - name: Login docker
-      run: docker login docker.pkg.github.com -u akimasa -p ${{ secrets.GITHUB_TOKEN }}
-    - name: Pull image
-      run: docker pull docker.pkg.github.com/akimasa/nintendont/devkitpro:1
     - name: Build Nintendont with Docker
-      run: docker run --privileged -v $(pwd):/root/ devkitpro /bin/bash /root/travis.sh
+      run: docker run --privileged -v $(pwd):/root/ docker.pkg.github.com/akimasa/nintendont/devkitpro:1 /bin/bash /root/travis.sh
     - name: Create Release
       id: create_release
       uses: akimasa/create-release@v2.0.2
